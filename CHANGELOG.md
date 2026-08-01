@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/hairbui76/cx-switch/compare/v0.2.0...v0.3.0) (2026-08-01)
+
+
+### Features
+
+* add an account from an auth.json file ([1df120a](https://github.com/hairbui76/cx-switch/commit/1df120a808bf898298f8fe99021d1f28693ae5ba))
+
 ## [0.2.0](https://github.com/hairbui76/cx-switch/compare/v0.1.0...v0.2.0) (2026-08-01)
 
 
