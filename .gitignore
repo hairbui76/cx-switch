@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Reference checkout of the tool this project is modelled on. Cloned locally
+# for comparison; not part of this repo.
+/cc-switch/
+
+# Never commit anything shaped like a saved account - they hold OAuth tokens.
+*auth.json
+*.credentials.json
+.codex-accounts/

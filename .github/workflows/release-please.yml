@@ -1,0 +1,44 @@
+name: release-please
+
+# Keeps a release PR open that bumps VERSION and writes CHANGELOG.md from the
+# Conventional Commit messages on main. Merging it tags the commit and publishes
+# a GitHub release, which is what `cx update --channel stable` resolves through
+# /releases/latest.
+#
+# The `main` channel needs none of this - it tracks every push - so a failure
+# here never blocks users from getting a fix.
+#
+# One-time repo setup, or this job fails at PR creation with
+# "GitHub Actions is not permitted to create or approve pull requests":
+#   Settings -> Actions -> General -> Workflow permissions
+#     [x] Allow GitHub Actions to create and approve pull requests
+# The permissions block below raises what GITHUB_TOKEN may do, but that switch
+# is a repo/org-level veto on top of it and cannot be granted from here.
+
+on:
+  push:
+    branches:
+      - main
+  # Lets a run be started by hand - after granting the permission below, for
+  # instance - without having to invent a commit to push.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# A second push while a release PR is being written would race it.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
