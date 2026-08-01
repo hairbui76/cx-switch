@@ -103,6 +103,39 @@ cx save work          # store that login as "work"
 cx save               # or let it name the account from your email
 ```
 
+### Import credentials instead of logging in
+
+For credentials that arrived some other way — copied off another machine,
+handed over by a teammate, or produced by a login that happened elsewhere:
+
+```bash
+cx import ~/from-laptop/auth.json          # name taken from the email
+cx import ./auth.json work                 # ...or pick one
+cat auth.json | cx import -                # read from stdin
+cx import ./auth.json work --activate      # switch to it as well
+cx import ./auth.json work --verify        # check it against the API first
+```
+
+Nothing touches your live `auth.json` unless you pass `--activate`.
+
+A whole `auth.json` is expected, but the bare `tokens` object out of one is
+accepted too, since that is what people tend to copy by hand. A missing
+`tokens.account_id` is recovered from the id_token — the usage endpoint needs
+it in a header, and a file assembled by hand often lacks it.
+
+Importing a login that is already saved is refused, so a stray file cannot
+quietly shadow an account. `--force` replaces the stored credentials instead,
+keeping the name the account is already filed under:
+
+```bash
+cx import ./fresh-auth.json --force        # update an account's tokens
+```
+
+`--verify` is the one flag that goes to the network. Without it, `import`
+works entirely offline and only reports whether the access token has expired
+— an expired one is fine, it gets refreshed on first use as long as the
+refresh token is still live.
+
 ### Switch
 
 ```bash

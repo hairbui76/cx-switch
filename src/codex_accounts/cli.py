@@ -11,9 +11,9 @@ from .term import CliError, enable_debug, err
 # Anything not in here is treated as an account name, so that
 # `cx work` means `cx use work`.
 KNOWN_ARGS = {
-    "add", "save", "use", "next", "list", "ls", "status", "remove", "rm",
-    "usage", "migrate", "doctor", "update", "version", "setup",
-    "help", "-h", "--help", "--version",
+    "add", "import", "save", "use", "next", "list", "ls", "status",
+    "remove", "rm", "usage", "migrate", "doctor", "update", "version",
+    "setup", "help", "-h", "--help", "--version",
 }
 
 
@@ -43,6 +43,21 @@ def build_parser():
     p.add_argument("--activate", action="store_true",
                    help="switch to it once it is added")
     p.set_defaults(func=commands.cmd_add)
+
+    p = sub.add_parser("import",
+                       help="add an account from an auth.json file instead "
+                            "of logging in")
+    p.add_argument("file", help="path to an auth.json, or - for stdin")
+    p.add_argument("name", nargs="?",
+                   help="account name (default: from email)")
+    p.add_argument("--activate", action="store_true",
+                   help="switch to it once it is imported")
+    p.add_argument("--verify", action="store_true",
+                   help="check the credentials against the API before "
+                        "trusting them")
+    p.add_argument("--force", action="store_true",
+                   help="replace an account that already exists")
+    p.set_defaults(func=commands.cmd_import)
 
     p = sub.add_parser("save", help="save the current login as an account")
     p.add_argument("name", nargs="?",

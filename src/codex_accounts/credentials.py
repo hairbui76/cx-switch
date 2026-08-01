@@ -20,10 +20,15 @@ import os
 
 from .jsonio import read_json, write_json
 from .paths import auth_path, codex_dir
+from .term import CliError
 
 # The claim namespace OpenAI puts its own fields under, in both the id_token
 # and the access_token.
 AUTH_CLAIM = "https://api.openai.com/auth"
+
+# Keys that mark a bare `tokens` object, i.e. someone copied that one key out
+# of an auth.json instead of the whole file.
+TOKEN_KEYS = ("access_token", "id_token", "refresh_token")
 
 
 # --------------------------------------------------------------------------
@@ -47,6 +52,44 @@ def tokens(auth):
         if isinstance(blk, dict):
             return blk
     return {}
+
+
+def normalize_auth(data):
+    """Coerce a parsed JSON blob into auth.json shape.
+
+    Accepts a whole auth.json, or just the `tokens` object out of one - people
+    importing credentials by hand copy either. Raises CliError on anything
+    that carries no login at all, so the caller can report it plainly.
+    """
+    if not isinstance(data, dict):
+        raise CliError("expected a JSON object at the top level")
+
+    if isinstance(data.get("tokens"), dict) or data.get("OPENAI_API_KEY"):
+        auth = dict(data)
+    elif any(key in data for key in TOKEN_KEYS):
+        auth = {"tokens": dict(data)}
+    else:
+        raise CliError(
+            "this does not look like Codex credentials - expected a "
+            "`tokens` object or an OPENAI_API_KEY")
+
+    blk = auth.get("tokens")
+    if isinstance(blk, dict):
+        blk = dict(blk)
+        # The usage endpoint wants the workspace id in a header. Recover it
+        # from the id_token when the file was assembled without it, or every
+        # usage call for this account would go out unscoped.
+        if not blk.get("account_id"):
+            claims = decode_jwt(blk.get("id_token")) or {}
+            scoped = claims.get(AUTH_CLAIM) or {}
+            if scoped.get("chatgpt_account_id"):
+                blk["account_id"] = scoped["chatgpt_account_id"]
+        auth["tokens"] = blk
+
+    if not auth.get("auth_mode"):
+        auth["auth_mode"] = "chatgpt" if auth.get("tokens") else "apikey"
+    auth.setdefault("OPENAI_API_KEY", None)
+    return auth
 
 
 # --------------------------------------------------------------------------

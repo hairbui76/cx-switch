@@ -1,15 +1,18 @@
 """One function per subcommand. All of them return a process exit code."""
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
 from . import migrate, shims, updater
 from .api import (OAUTH_CLIENT_ID, TOKEN_URL, USAGE_URL, ApiError, fmt_credits,
                   fmt_window, http_json, usage_for, windows)
-from .credentials import access_expires_at, identity, read_auth, user_key
+from .credentials import (access_expires_at, identity, normalize_auth,
+                          read_auth, user_key)
 from .jsonio import read_json
 from .paths import (account_path, auth_path, codex_dir, sessions_dir,
                     store_dir)
@@ -85,6 +88,93 @@ def cmd_save(args):
 
     data = snapshot_current(name)
     ok(f"saved {bold(name)}  {account_summary(data)}")
+    return 0
+
+
+def _read_source(source):
+    """(text, label) for a path or `-` meaning stdin."""
+    if source == "-":
+        return sys.stdin.read(), "stdin"
+    path = os.path.expanduser(source)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read(), path
+    except OSError as exc:
+        raise CliError(f"cannot read {path}: {exc}")
+
+
+def _report_token(auth) -> None:
+    """Say whether the credentials just taken on are usable yet."""
+    expires = access_expires_at(auth)
+    if expires is None:
+        return
+    left = expires - time.time()
+    if left > 0:
+        info(f"access token valid for {int(left // 3600)}h")
+    else:
+        warn("the access token in this file has expired - it will be "
+             "refreshed on first use, provided the refresh token is live")
+
+
+def cmd_import(args):
+    """Take on an account from an auth.json instead of logging in.
+
+    For credentials that arrived some other way: copied off another machine,
+    handed over by a teammate, or produced by a login that happened elsewhere.
+    Nothing is written to the live auth.json unless --activate is passed.
+    """
+    raw, label = _read_source(args.file)
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise CliError(f"{label} is not valid JSON: {exc}")
+
+    auth = normalize_auth(parsed)
+    key = user_key(auth)
+    if not key:
+        raise CliError(f"{label} carries no recognisable login - it has "
+                       "neither a usable token nor an API key")
+
+    ident = identity(auth)
+    existing = find_by_user_key(key)
+
+    if existing and not args.force:
+        raise CliError(
+            f"that login is already saved as '{existing}' - pass --force to "
+            "replace its credentials with this file")
+    if existing:
+        # Replacing a known login: keep the name it is already filed under, or
+        # `cx use <old name>` would silently go on using the stale copy.
+        if args.name and args.name != existing:
+            warn(f"keeping the existing name {bold(existing)} - "
+                 f"rename it afterwards if you want {args.name}")
+        name = existing
+    else:
+        name = args.name or unique_name(_name_from_email(ident["email"]))
+        clash = name in list_accounts()
+        if clash and not args.force:
+            raise CliError(
+                f"account '{name}' already exists for a different login - "
+                "pick another name, or pass --force to overwrite it")
+
+    data = build_account(name, auth)
+    save_account(data)
+    ok(f"imported {bold(name)}  {account_summary(data)}  "
+       f"{dim('from ' + label)}")
+    _report_token(auth)
+
+    if args.verify:
+        info("checking the credentials against the API")
+        usage = usage_for(data)
+        ok(f"verified - {usage.get('email') or '?'} "
+           f"{dim(usage.get('plan_type') or '')}")
+
+    if args.activate:
+        autosave_current()
+        apply_account(data)
+        ok(f"switched to {bold(name)}")
+    else:
+        info(f"switch to it with: {shims.command_name()} {name}")
     return 0
 
 
