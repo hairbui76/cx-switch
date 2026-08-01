@@ -8,7 +8,7 @@
     no reinstall, and updates come from `git pull`.
 
     For normal use install a managed copy instead, which can self-update:
-      irm https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.ps1 | iex
+      irm https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.ps1 | iex
 #>
 
 $ErrorActionPreference = 'Stop'

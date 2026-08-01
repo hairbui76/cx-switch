@@ -54,13 +54,13 @@ API-key logins carry no user at all, so they are keyed by a digest of the key.
 ### macOS / Linux / Git Bash / WSL
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.sh | sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.ps1 | iex
 ```
 
 Then open a new terminal, or `source ~/.bashrc` — the installer tells you which.
@@ -75,7 +75,7 @@ scripts, and over `ssh host cx usage`.
 To install under a different name:
 
 ```bash
-CODEX_SWITCH_NAME=cxs curl -fsSL https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.sh | sh
+CODEX_SWITCH_NAME=cxs curl -fsSL https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.sh | sh
 ```
 
 Every message the tool prints then refers to `cxs`, because the launcher tells
@@ -276,8 +276,8 @@ distinguishable from a broken token.
 ## Working on the tool itself
 
 ```bash
-git clone https://github.com/hairbui76/codex-switch
-cd codex-switch
+git clone https://github.com/hairbui76/cx-switch
+cd cx-switch
 ./init.sh          # or .\init.ps1 on PowerShell
 ```
 

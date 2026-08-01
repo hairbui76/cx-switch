@@ -4,7 +4,7 @@
 # no reinstall, and updates come from `git pull`.
 #
 # For normal use install a managed copy instead, which can self-update:
-#   curl -fsSL https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.sh | sh
 #
 # Supports bash and zsh, on Linux / macOS / Git Bash on Windows.
 

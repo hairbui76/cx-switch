@@ -31,7 +31,7 @@ from . import VERSION, shims
 from .jsonio import read_json, write_json, write_text
 from .term import (CliError, bold, debug, dim, green, info, ok, warn, yellow)
 
-DEFAULT_REPO = "hairbui76/codex-switch"
+DEFAULT_REPO = "hairbui76/cx-switch"
 
 # `main` tracks every push, so a one-line fix is available the moment it lands.
 # `stable` tracks the newest published release, for people who only want those.

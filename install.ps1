@@ -4,7 +4,7 @@
     One-line installer for codex-switch.
 
 .DESCRIPTION
-    irm https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.ps1 | iex
 
     Needs PowerShell 5+ and Python 3.7+. Does not need git.
     Re-running it is also how you upgrade, though `cx update` is quicker once
@@ -33,7 +33,7 @@
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
 
-    $repo = if ($env:CODEX_SWITCH_REPO) { $env:CODEX_SWITCH_REPO } else { 'hairbui76/codex-switch' }
+    $repo = if ($env:CODEX_SWITCH_REPO) { $env:CODEX_SWITCH_REPO } else { 'hairbui76/cx-switch' }
     $channel = if ($env:CODEX_SWITCH_CHANNEL) { $env:CODEX_SWITCH_CHANNEL } else { 'main' }
 
     # --- interpreter --------------------------------------------------------

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # One-line installer for codex-switch.
 #
-#   curl -fsSL https://raw.githubusercontent.com/hairbui76/codex-switch/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/hairbui76/cx-switch/main/install.sh | sh
 #
 # Needs curl (or wget), tar and Python 3.7+. Does not need git.
 # Re-running it is also how you upgrade, though `cx update` is quicker once
@@ -17,7 +17,7 @@
 
 set -e
 
-REPO="${CODEX_SWITCH_REPO:-hairbui76/codex-switch}"
+REPO="${CODEX_SWITCH_REPO:-hairbui76/cx-switch}"
 CHANNEL="${CODEX_SWITCH_CHANNEL:-main}"
 
 die() {
