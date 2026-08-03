@@ -72,6 +72,16 @@ def unbind(path: str):
     return name
 
 
+def rename_account(old: str, new: str):
+    """Point every binding on `old` at `new`. Returns the paths changed."""
+    entries = read_bindings()
+    changed = [key for key, value in entries.items() if value == old]
+    if changed:
+        _save({key: (new if value == old else value)
+               for key, value in entries.items()})
+    return changed
+
+
 def forget_account(name: str):
     """Drop every binding pointing at `name`. Returns the paths dropped."""
     entries = read_bindings()

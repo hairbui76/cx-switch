@@ -537,6 +537,35 @@ def cmd_remove(args):
     return 0
 
 
+def cmd_rename(args):
+    old, new = args.name, args.new_name
+    data = load_account(old)          # also rejects an incompatible record
+    if new == old:
+        raise CliError(f"'{old}' is already called that")
+    if slugify(new) != new:
+        raise CliError(f"'{new}' cannot be a file name - "
+                       f"try '{slugify(new)}'")
+    if os.path.exists(account_path(new)):
+        raise CliError(f"account '{new}' already exists - remove it first, "
+                       "or pick another name")
+
+    # Write the new record before dropping the old one: a duplicate can be
+    # cleaned up by hand, a deleted account cannot.
+    data["name"] = new
+    save_account(data)
+    os.remove(account_path(old))
+
+    if profiles.rename_profile(old, new):
+        info(f"moved its profile to {dim(profile_dir(new))}")
+    for directory in bindings.rename_account(old, new):
+        info(f"rebound {dim(directory)}")
+
+    ok(f"renamed {bold(old)} -> {bold(new)}  {account_summary(data)}")
+    print(dim(f"     a {bindings.MARKER_FILE} file naming {old} has to be "
+              "edited by hand"))
+    return 0
+
+
 def cmd_migrate(args):
     return migrate.run()
 

@@ -173,11 +173,17 @@ second column; that is normal, not an error.
 ### Manage
 
 ```bash
+cx rename old new     # or `cx mv`
 cx remove old-account
 cx doctor             # diagnose install, paths, credentials, API access
 cx update             # install the newest build
 cx migrate            # import profiles from the v1 codex-accounts script
 ```
+
+`cx rename` moves the account file, the name recorded inside it, the account's
+profile and every binding that pointed at it. The one thing it cannot reach is
+a `.codex-account` file inside a repository, which names the account as plain
+text — edit that by hand.
 
 ## Two accounts at the same time, one per directory
 

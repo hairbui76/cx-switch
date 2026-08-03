@@ -426,6 +426,30 @@ def sync_back(name: str) -> bool:
     return True
 
 
+def rename_profile(old: str, new: str) -> bool:
+    """Move a profile to a new account name.
+
+    The links inside it are absolute, so moving the directory leaves them
+    pointing exactly where they did.
+    """
+    source = profile_dir(old)
+    if not os.path.isdir(source):
+        return False
+
+    target = profile_dir(new)
+    if os.path.isdir(target):
+        # An orphan from an earlier rename or removal. Unlink it properly
+        # rather than let os.rename fail on a directory that is not empty.
+        remove_profile(new)
+
+    try:
+        os.rename(source, target)
+    except OSError as exc:
+        warn(f"could not move the profile to {target}: {exc}")
+        return False
+    return True
+
+
 def remove_profile(name: str) -> bool:
     """Delete a profile. Only the links are lost; ~/.codex is untouched."""
     path = profile_dir(name)
