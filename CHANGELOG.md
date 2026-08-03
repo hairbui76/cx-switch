@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/hairbui76/cx-switch/compare/v0.3.0...v0.4.0) (2026-08-03)
+
+
+### Features
+
+* rename a saved account with `cx rename` ([01ac071](https://github.com/hairbui76/cx-switch/commit/01ac071b5b82bb4a78b9c2e91103f75850a643a0))
+* run a different account in each directory, several windows at once ([2f397e5](https://github.com/hairbui76/cx-switch/commit/2f397e5b10779260c9e995aa0af785a97111e0af))
+
 ## [0.3.0](https://github.com/hairbui76/cx-switch/compare/v0.2.0...v0.3.0) (2026-08-01)
 
 
