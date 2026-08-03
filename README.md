@@ -29,6 +29,11 @@ There is nothing to sync. Codex holds no account identity outside `auth.json`
 — not in `config.toml`, not in the sqlite state — so a switch cannot leave the
 previous account's data behind, and it cannot roll your sessions back.
 
+Switching is machine-wide: every window follows the account you switch to. To
+run **one account per directory, several windows at once**, bind the directory
+and start Codex with `cx run` — see [Two accounts at the same
+time](#two-accounts-at-the-same-time-one-per-directory).
+
 ### Accounts are keyed by user, not by workspace
 
 `auth.json` carries a `tokens.account_id`, and it is tempting to treat that as
@@ -174,6 +179,122 @@ cx update             # install the newest build
 cx migrate            # import profiles from the v1 codex-accounts script
 ```
 
+## Two accounts at the same time, one per directory
+
+`cx use` swaps the *one* live login, so every Codex window on the machine
+follows it. Bind a directory instead and that directory gets its own account —
+and those windows run side by side:
+
+```bash
+cd ~/work/api     && cx bind work
+cd ~/side/scraper && cx bind personal
+
+cd ~/work/api     && cx run     # this window is work
+cd ~/side/scraper && cx run     # this one is personal, at the same time
+```
+
+`cx bind` with no name binds the account you are logged in as right now.
+Everything after `cx run` goes straight to Codex, so `cx run resume`,
+`cx run --model gpt-5.6-sol` and `cx run exec "..."` all work as usual.
+
+```bash
+cx bindings           # every directory -> account, with the one you are in marked
+cx unbind             # drop this directory's binding (the account is kept)
+cx status             # ... now also says which account this directory runs as
+```
+
+### How it works
+
+`cx run` starts Codex with `CODEX_HOME` pointed at a per-account **profile** —
+a second Codex home holding *only* the file that says who is logged in.
+Everything else is a link back to `~/.codex`, so the sharing guarantee is the
+same one the rest of this tool makes:
+
+```text
+~/.codex-accounts/profiles/work/
+  auth.json                             this account's tokens   <- per account
+  sessions -> ~/.codex/sessions         your sessions           <- shared
+  config.toml, history.jsonl, skills/, memories/, rules/, ...
+```
+
+Everything in `~/.codex` is shared unless it names an account: `auth.json`, the
+model list a plan is entitled to (`models_cache.json`), and scratch
+directories. Anything a future Codex release adds is shared by default.
+`cx doctor` lists what ended up shared per profile.
+
+Profiles are keyed by account, not by directory, so ten repositories bound to
+`work` share one profile and one set of tokens — exactly what ten windows on
+one login do today.
+
+Tokens rotate while Codex runs, so `cx run` folds the profile's `auth.json`
+back into the saved account when the window exits. That keeps `cx usage` and
+`cx status` reporting on tokens that still work. If a window is killed before
+it gets there, `cx sync` reconciles every profile.
+
+### Directory to account
+
+Resolved in this order, nearest first:
+
+| Source | Wins over | Use it for |
+| --- | --- | --- |
+| `CODEX_SWITCH_ACCOUNT` | everything | one-off overrides; `cx run` sets it for the window it starts, so a shell inside that window stays on the same account |
+| `.codex-account` in the directory | bindings | a repository that should carry the decision with it (one line: the account name) |
+| `cx bind` | — | the normal case; kept in `~/.codex-accounts/.bindings.json`, so nothing is added to your repositories |
+
+A directory inherits the binding of its nearest bound parent, so
+`cx bind work --path ~/work` covers every checkout under `~/work`. `cx run -a
+personal` ignores all of it for one command.
+
+### Anything that starts `codex` itself
+
+VS Code, a wrapper script, direnv, a long-lived tmux pane — `cx env` prints the
+two variables that put a whole shell on this directory's account:
+
+```bash
+eval "$(cx env)"        # then plain `codex` in this shell is that account
+cx env --format powershell
+```
+
+For a VS Code workspace, put the same value in
+`.vscode/settings.json` → `terminal.integrated.env.<platform>`:
+
+```json
+{
+  "terminal.integrated.env.windows": {
+    "CODEX_HOME": "C:\\Users\\you\\.codex-accounts\\profiles\\work"
+  }
+}
+```
+
+Only `cx run` folds tokens back on exit, so run `cx sync` now and then if you
+launch Codex this way. And because `CODEX_HOME` is Codex's own variable, `cx`
+itself follows it: in such a shell, `cx status` reports *that* window's
+account, and `cx run` refuses rather than build a profile out of a profile.
+
+### What is not shared
+
+- **SQLite databases on Windows.** SQLite must not be reached through two
+  paths at once — each directory would get its own write-ahead log, and two
+  WALs over one database is how a database gets corrupted. A symlink is safe
+  (SQLite resolves it), a hardlink is not, and Windows has no unprivileged
+  file symlinks. So on a Windows without **Developer Mode**, `state_*.sqlite`
+  and friends stay per-profile; `cx doctor` says which. Everything in a
+  *directory* is shared regardless, junctions needing no privilege — including
+  `sessions/`, which is the one that matters.
+- **Plain files are hardlinked** where symlinks are unavailable. Codex
+  rewrites a file by renaming a new one over it, which breaks a hardlink — so
+  `cx run` re-links on launch and on exit, keeping whichever copy was written
+  last. Two windows editing `config.toml` at the same time is
+  last-one-out-wins.
+- **A login that appears in the wrong profile.** Run `codex login` inside a
+  bound window as a different account and the next `cx run` sets those
+  credentials aside as `auth.json.bak` rather than either destroying them or
+  filing them under the wrong name. Take them on with
+  `cx import <that path> <name>`.
+
+`cx remove <name>` deletes the account, its profile and every binding pointing
+at it. Only links are removed — `~/.codex` is never touched.
+
 ## Updating
 
 ```bash
@@ -282,11 +403,15 @@ distinguishable from a broken token.
 
 - Accounts live in `~/.codex-accounts/<name>.json`, written with `0600`
   permissions. **They contain OAuth tokens — do not commit or share them.**
+- Profiles live in `~/.codex-accounts/profiles/<name>/` and bindings in
+  `~/.codex-accounts/.bindings.json`. A profile is rebuilt from the saved
+  account whenever it is used, so deleting one costs nothing.
 - `~/.codex/auth.json` is backed up to `~/.codex-accounts/.auth.json.bak`
   before every switch.
 - Quit Codex before switching. A running instance — the desktop app in
   particular — may rewrite `auth.json` when it exits and restore the previous
-  account.
+  account. A window started with `cx run` writes to its own profile instead,
+  so it neither clobbers a switch nor is clobbered by one.
 - Accounts and the install are independent. Reinstalling, updating or rolling
   back never touches `~/.codex-accounts/`.
 
@@ -296,7 +421,8 @@ distinguishable from a broken token.
 | --- | --- |
 | `CODEX_HOME` | Codex's own data directory (Codex reads this too) |
 | `CODEX_ACCOUNTS_DIR` | where saved accounts are stored |
-| `CODEX_BINARY` | name or path of the Codex CLI, used by `cx add` |
+| `CODEX_BINARY` | name or path of the Codex CLI, used by `cx add` and `cx run` |
+| `CODEX_SWITCH_ACCOUNT` | account `cx run` should use, ahead of any binding |
 | `CODEX_SWITCH_PYTHON` | interpreter to use |
 | `CODEX_SWITCH_HOME` | install root (default `~/.codex-switch`) |
 | `CODEX_SWITCH_NAME` | what to call the command (default `cx`) |
@@ -345,6 +471,8 @@ src/codex_accounts/         all logic, stdlib only
   cli.py                      argument parsing, entry point
   commands.py                 one function per subcommand
   store.py                    save / load / apply accounts
+  profiles.py                 per-account CODEX_HOMEs for `cx run`
+  bindings.py                 which directory runs under which account
   credentials.py              auth.json, JWT claims, identity
   api.py                      usage endpoint + token refresh
   updater.py                  version resolution, download, activate, rollback

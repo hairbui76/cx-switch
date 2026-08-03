@@ -17,8 +17,10 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from .credentials import (access_expires_at, read_auth, tokens, write_auth)
-from .store import current_user_key, save_account
+from . import profiles
+from .credentials import (access_expires_at, read_auth, tokens, user_key,
+                          write_auth)
+from .store import build_account, current_user_key, save_account
 from .term import CliError, debug, dim, green, red, yellow
 
 # Taken from the `aud` claim of a Codex id_token.
@@ -176,6 +178,20 @@ def token_for(data):
             return tokens(live)["access_token"]
 
     auth = data.get("auth") or {}
+
+    # Same reasoning for an account bound to a directory: `cx run` gives it its
+    # own CODEX_HOME, and Codex rotates the tokens in there. The store catches
+    # up on exit, but a window still open - or one that was killed - has not
+    # got there yet.
+    inside = profiles.profile_auth(data.get("name"))
+    if (inside and user_key(inside) == data.get("userKey")
+            and (access_expires_at(inside) or 0)
+            > (access_expires_at(auth) or 0)):
+        debug(f"{data.get('name')}: using its profile's auth.json")
+        auth = inside
+        data["auth"] = auth
+        save_account(build_account(data["name"], auth))
+
     blk = tokens(auth)
     if not blk.get("access_token"):
         raise CliError("no access token stored - run `codex login`")

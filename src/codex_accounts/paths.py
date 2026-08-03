@@ -51,6 +51,24 @@ def auth_backup_path() -> str:
     return os.path.join(store_dir(), ".auth.json.bak")
 
 
+def profiles_dir() -> str:
+    """Parent of the per-account CODEX_HOMEs used by `cx run`."""
+    return os.path.join(store_dir(), "profiles")
+
+
+def profile_dir(name: str) -> str:
+    return os.path.join(profiles_dir(), name)
+
+
+def bindings_path() -> str:
+    """Which directory runs under which account.
+
+    A dotfile so `list_accounts`, which treats every *.json in the store as an
+    account, does not offer "bindings" as one.
+    """
+    return os.path.join(store_dir(), ".bindings.json")
+
+
 def legacy_manager_dir() -> str:
     """Where the v1 `codex-accounts` script kept its profiles."""
     override = os.environ.get("CODEX_ACCOUNT_MANAGER_HOME")

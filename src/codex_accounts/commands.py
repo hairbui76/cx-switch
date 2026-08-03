@@ -1,5 +1,6 @@
 """One function per subcommand. All of them return a process exit code."""
 
+import contextlib
 import json
 import os
 import shutil
@@ -8,14 +9,14 @@ import sys
 import tempfile
 import time
 
-from . import migrate, shims, updater
+from . import bindings, migrate, profiles, shims, updater
 from .api import (OAUTH_CLIENT_ID, TOKEN_URL, USAGE_URL, ApiError, fmt_credits,
                   fmt_window, http_json, usage_for, windows)
 from .credentials import (access_expires_at, identity, normalize_auth,
                           read_auth, user_key)
 from .jsonio import read_json
-from .paths import (account_path, auth_path, codex_dir, sessions_dir,
-                    store_dir)
+from .paths import (account_path, auth_path, codex_dir, profile_dir,
+                    profiles_dir, sessions_dir, store_dir)
 from .store import (account_summary, apply_account, build_account,
                     current_account_name, current_user_key, find_by_user_key,
                     list_accounts, load_account, save_account, slugify,
@@ -278,6 +279,142 @@ def cmd_next(args):
 
 
 # --------------------------------------------------------------------------
+# per-directory accounts
+# --------------------------------------------------------------------------
+
+def _resolve_for(where, override=None):
+    """The account a directory should run as, and where that came from."""
+    if override:
+        return override, "argument", None
+    name, source, origin = bindings.resolve(where)
+    if not name:
+        raise CliError(
+            f"{where} is not bound to an account. Bind it with: "
+            f"{shims.command_name()} bind <name>   (or pass --account)"
+        )
+    return name, source, origin
+
+
+def _origin_note(source, origin) -> str:
+    if not origin:
+        return ""
+    return dim(f"  ({source}: {origin})")
+
+
+def cmd_bind(args):
+    name = args.name or current_account_name()
+    if not name:
+        raise CliError(
+            "no account given, and the login in use is not saved. Run: "
+            f"{shims.command_name()} bind <name>"
+        )
+
+    data = load_account(name)
+    path = bindings.bind(args.path or os.getcwd(), name)
+    profiles.ensure_profile(data)
+
+    ok(f"{path} -> {bold(name)}  {account_summary(data)}")
+    info(f"start Codex here with `{shims.command_name()} run`")
+    return 0
+
+
+def cmd_unbind(args):
+    path = args.path or os.getcwd()
+    name = bindings.unbind(path)
+    if not name:
+        inherited, source, origin = bindings.resolve(path)
+        if inherited:
+            raise CliError(
+                f"{path} has no binding of its own - it inherits "
+                f"{inherited} from {origin}"
+            )
+        raise CliError(f"{path} is not bound to an account")
+
+    ok(f"unbound {path}  {dim('(was ' + name + ')')}")
+    info(f"the profile is kept - remove it with "
+         f"`{shims.command_name()} remove {name}`")
+    return 0
+
+
+def cmd_bindings(args):
+    entries = bindings.read_bindings()
+    active, source, origin = bindings.resolve()
+
+    if not entries:
+        warn("no directories bound yet. In a repository, run: "
+             f"{shims.command_name()} bind <name>")
+    else:
+        width = _column(list(entries), "DIRECTORY")
+        print(bold(f"  {'DIRECTORY'.ljust(width)}  ACCOUNT"))
+        for path, name in entries.items():
+            here = (source == "binding" and origin == path)
+            marker = green("*") if here else " "
+            print(f"{marker} {path.ljust(width)}  "
+                  f"{bold(name) if here else name}")
+        print()
+
+    if active:
+        print(f"{green('[ok]')} here: {bold(active)}"
+              f"{_origin_note(source, origin)}")
+    else:
+        info(f"{os.getcwd()} is not bound - it would use the live account "
+             f"({current_account_name() or 'unsaved'})")
+    return 0
+
+
+def cmd_run(args):
+    argv = list(args.argv or [])
+    # `cx run -- --resume` and `cx run --resume` mean the same thing; the
+    # separator is only there for anyone who wants to be explicit.
+    if argv and argv[0] == "--":
+        argv.pop(0)
+
+    name, source, origin = _resolve_for(os.getcwd(), args.account)
+    data = load_account(name)
+    info(f"{bold(name)}  {account_summary(data)}"
+         f"{_origin_note(source, origin)}")
+    return profiles.launch(data, argv, binary=args.codex_binary)
+
+
+def _default_shell() -> str:
+    """The syntax the calling shell most likely speaks."""
+    if os.name != "nt" or os.environ.get("MSYSTEM") or os.environ.get("SHELL"):
+        return "posix"
+    return "powershell"
+
+
+def cmd_env(args):
+    name, _, _ = _resolve_for(os.getcwd(), args.account)
+    data = load_account(name)
+
+    # Building the profile can have something to say, and this output is meant
+    # to be eval'd - so let it say it on stderr.
+    with contextlib.redirect_stdout(sys.stderr):
+        lines = profiles.env_exports(data, args.format or _default_shell())
+    print("\n".join(lines))
+    return 0
+
+
+def cmd_sync(args):
+    info("sessions, config.toml and history are shared - switching only "
+         "swaps auth.json, and nothing else is copied")
+
+    # What this command is for: an instance that died without running its exit
+    # hook leaves refreshed tokens in its profile that the store never saw.
+    # Folding them back keeps `usage` and `status` honest.
+    names = profiles.list_profiles()
+    if not names:
+        info(f"no profiles yet - `{shims.command_name()} bind <name>` "
+             "makes one")
+        return 0
+
+    synced = [name for name in names if profiles.sync_back(name)]
+    ok(f"reconciled {len(synced)}/{len(names)} profile(s) with the store"
+       f"  {dim(', '.join(synced)) if synced else ''}")
+    return 0
+
+
+# --------------------------------------------------------------------------
 # inspecting
 # --------------------------------------------------------------------------
 
@@ -332,6 +469,11 @@ def cmd_status(args):
             remaining = ""
         mode = dim("  mode: " + ident["authMode"]) if ident["authMode"] else ""
         print(f"     token: {state}{remaining}{mode}")
+
+    bound, source, origin = bindings.resolve()
+    if bound:
+        print(f"     here:  {bold(bound)}{_origin_note(source, origin)}"
+              f"  {dim('via ' + shims.command_name() + ' run')}")
     return 0
 
 
@@ -387,6 +529,10 @@ def cmd_remove(args):
         )
 
     os.remove(path)
+    if profiles.remove_profile(args.name):
+        info(f"removed its profile {dim(profile_dir(args.name))}")
+    for directory in bindings.forget_account(args.name):
+        info(f"unbound {dim(directory)}")
     ok(f"removed {bold(args.name)}")
     return 0
 
@@ -464,6 +610,27 @@ def cmd_doctor(args):
     if migrate.has_legacy_profiles():
         print(yellow(f"  v1 profiles found - run "
                      f"`{shims.command_name()} migrate`"))
+
+    print()
+    print(bold("per-directory"))
+    print(f"  profiles:  {profiles_dir()}")
+    built = profiles.list_profiles()
+    for name in built:
+        shared, unshared = profiles.link_report(profile_dir(name))
+        state = (green(f"{len(shared)} shared")
+                 if not unshared
+                 else yellow(f"{len(shared)} shared, "
+                             f"{len(unshared)} not: {', '.join(unshared)}"))
+        print(f"    {name.ljust(12)} {state}")
+    if not built:
+        print(dim("             none yet - "
+                  f"`{shims.command_name()} bind <name>` makes one"))
+
+    entries = bindings.read_bindings()
+    print(f"  bindings:  {len(entries)} directory(ies)")
+    bound, source, origin = bindings.resolve()
+    print(f"  here:      {bold(bound) if bound else dim('unbound')}"
+          f"{_origin_note(source, origin)}")
 
     print()
     print(bold("api"))
