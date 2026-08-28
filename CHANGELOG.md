@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/hairbui76/cx-switch/compare/v0.4.0...v0.5.0) (2026-08-28)
+
+
+### Features
+
+* emit bindings as bare KEY=VALUE for launch hooks ([506d6aa](https://github.com/hairbui76/cx-switch/commit/506d6aa1aab8741cf5f3b28dd758572f14384e6f))
+
 ## [0.4.0](https://github.com/hairbui76/cx-switch/compare/v0.3.0...v0.4.0) (2026-08-03)
 
 
