@@ -384,7 +384,18 @@ def _default_shell() -> str:
 
 
 def cmd_env(args):
-    name, _, _ = _resolve_for(os.getcwd(), args.account)
+    if getattr(args, "if_bound", False):
+        # An unbound directory is a normal state, not a failure. Callers that
+        # run this unconditionally on every launch -- agent-of-empires'
+        # `host_hooks.before_session`, a shell hook like direnv -- would
+        # otherwise abort on any directory the user never bound. A broken
+        # account or profile still raises, so only "no binding here" is
+        # softened.
+        name = args.account or bindings.resolve(os.getcwd())[0]
+        if not name:
+            return 0
+    else:
+        name, _, _ = _resolve_for(os.getcwd(), args.account)
     data = load_account(name)
 
     # Building the profile can have something to say, and this output is meant

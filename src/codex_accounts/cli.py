@@ -96,8 +96,12 @@ def build_parser():
                        help="print env vars putting a shell on this "
                             "directory's account")
     p.add_argument("-a", "--account", help="use this account instead")
-    p.add_argument("--format", choices=("posix", "powershell", "cmd"),
-                   help="shell syntax to emit (default: guessed)")
+    p.add_argument("--format", choices=("posix", "powershell", "cmd", "plain"),
+                   help="syntax to emit: a shell dialect to eval, or `plain` "
+                        "for bare KEY=VALUE (default: guessed shell)")
+    p.add_argument("--if-bound", action="store_true",
+                   help="print nothing and succeed when this directory has "
+                        "no binding, instead of failing")
     p.set_defaults(func=commands.cmd_env)
 
     p = sub.add_parser("sync",

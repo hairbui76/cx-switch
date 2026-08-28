@@ -536,6 +536,12 @@ def env_exports(data, shell: str):
     The escape hatch for anything that launches `codex` itself instead of going
     through `cx run`: VS Code's integrated terminal, a wrapper script, a
     long-lived tmux pane.
+
+    `plain` emits bare `KEY=VALUE` for consumers that read the pairs
+    themselves rather than eval'ing a shell: agent-of-empires'
+    `host_hooks.before_session`, `docker --env-file`, systemd
+    `EnvironmentFile`. No quoting is applied, because nothing downstream
+    unquotes it -- a quote would land in the value.
     """
     path = ensure_profile(data)
     if shell == "posix" and os.name == "nt":
@@ -545,6 +551,8 @@ def env_exports(data, shell: str):
     pairs = (("CODEX_HOME", path),
              ("CODEX_SWITCH_ACCOUNT", data["name"]))
 
+    if shell == "plain":
+        return [f"{key}={value}" for key, value in pairs]
     if shell == "powershell":
         return [f'$env:{key} = "{value}"' for key, value in pairs]
     if shell == "cmd":

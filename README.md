@@ -277,6 +277,42 @@ launch Codex this way. And because `CODEX_HOME` is Codex's own variable, `cx`
 itself follows it: in such a shell, `cx status` reports *that* window's
 account, and `cx run` refuses rather than build a profile out of a profile.
 
+### Anything that reads `KEY=VALUE` instead of a shell
+
+`cx env --format plain` drops the shell syntax and emits the pairs bare:
+
+```text
+CODEX_HOME=/home/you/.codex-accounts/profiles/work
+CODEX_SWITCH_ACCOUNT=work
+```
+
+That is the shape `docker --env-file`, systemd `EnvironmentFile`, and
+[agent-of-empires](https://github.com/agent-of-empires/agent-of-empires)'
+`host_hooks.before_session` all read. Nothing unquotes it, so no quoting is
+applied — a quote would land in the value.
+
+Add `--if-bound` for anything that runs on **every** launch. Plain `cx env`
+fails on an unbound directory, which is right for `eval "$(cx env)"` (you asked
+for an account and there isn't one) but wrong for a launch hook: it would abort
+every session in every directory you never bound. With the flag, an unbound
+directory prints nothing and exits 0, so the agent just uses your live login. A
+broken account or profile still fails.
+
+```toml
+# ~/.agent-of-empires/profiles/<name>/config.toml
+[host_hooks]
+before_session = ['cx env --format plain --if-bound']
+```
+
+AoE runs the hook with the working directory set to the session's project, so
+`cx env` resolves the same binding it would if you had `cd`'d there yourself —
+`cx bind` and `.codex-account` both apply, per-directory, with no AoE-specific
+configuration on this side. Requires an AoE build with `host_hooks.before_session`.
+
+One gotcha: `CODEX_SWITCH_ACCOUNT` outranks every binding. If it is set in the
+environment that started `aoe serve`, every session inherits that one account no
+matter what is bound. Unset it there.
+
 ### What is not shared
 
 - **SQLite databases on Windows.** SQLite must not be reached through two
