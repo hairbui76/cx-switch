@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/hairbui76/cx-switch/compare/v0.5.0...v0.6.0) (2026-09-23)
+
+
+### Features
+
+* renew a saved account's tokens with `cx login`, and log in by device code ([550796c](https://github.com/hairbui76/cx-switch/commit/550796cceb4d50924e7064783bf55d05391e1822))
+
 ## [0.5.0](https://github.com/hairbui76/cx-switch/compare/v0.4.0...v0.5.0) (2026-08-28)
 
 
