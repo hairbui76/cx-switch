@@ -11,7 +11,7 @@ from .term import CliError, enable_debug, err
 # Anything not in here is treated as an account name, so that
 # `cx work` means `cx use work`.
 KNOWN_ARGS = {
-    "add", "import", "save", "use", "next", "list", "ls", "status",
+    "add", "login", "import", "save", "use", "next", "list", "ls", "status",
     "remove", "rm", "rename", "mv", "usage", "migrate", "doctor", "update",
     "version", "setup", "run", "bind", "unbind", "bindings", "env", "sync",
     "help", "-h", "--help", "--version",
@@ -43,7 +43,18 @@ def build_parser():
                    help="account name (default: from email)")
     p.add_argument("--activate", action="store_true",
                    help="switch to it once it is added")
+    p.add_argument("--device", action="store_true",
+                   help="log in with a device code (no browser needed)")
     p.set_defaults(func=commands.cmd_add)
+
+    p = sub.add_parser("login",
+                       help="log in again on a saved account whose token has "
+                            "died, without disturbing the current one")
+    p.add_argument("name", nargs="?",
+                   help="account to renew (default: whichever you log in as)")
+    p.add_argument("--device", action="store_true",
+                   help="log in with a device code (no browser needed)")
+    p.set_defaults(func=commands.cmd_login)
 
     p = sub.add_parser("import",
                        help="add an account from an auth.json file instead "

@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-from . import profiles
+from . import profiles, shims
 from .credentials import (access_expires_at, read_auth, tokens, user_key,
                           write_auth)
 from .store import build_account, current_user_key, save_account
@@ -77,9 +77,11 @@ def _explain(stage: str, status: int, body: str) -> str:
 
     if code == "refresh_token_invalidated" or (
             stage == "refresh" and status in (400, 401)):
-        return "session ended - run `codex login` on this account"
+        return (f"session ended - run `{shims.command_name()} login` "
+                "on this account")
     if stage == "usage" and status == 401:
-        return "token rejected - log in again on this account"
+        return (f"token rejected - run `{shims.command_name()} login` "
+                "on this account")
     if stage == "usage" and status == 403:
         return "usage forbidden for this account"
     if status == 429:

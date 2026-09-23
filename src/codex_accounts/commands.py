@@ -179,28 +179,33 @@ def cmd_import(args):
     return 0
 
 
-def cmd_add(args):
-    """Log in as another account without disturbing the current one.
+def _login_elsewhere(args):
+    """Run `codex login` against a throwaway CODEX_HOME; return its auth.json.
 
-    `codex login` is run against a throwaway CODEX_HOME, so the new tokens
-    land in a temporary directory instead of overwriting the live auth.json.
-    That makes adding an account safe even mid-session.
+    The new tokens land in a temporary directory instead of overwriting the
+    live auth.json, so logging in is safe even mid-session.
     """
     binary = shutil.which(args.codex_binary)
     if not binary:
         raise CliError(f"`{args.codex_binary}` not found on PATH - "
                        "install Codex, or pass --codex-binary")
 
+    argv = [binary, "login"]
+    if args.device:
+        # No browser on this machine: Codex prints a URL and a code to enter
+        # on any other device instead.
+        argv.append("--device-auth")
+
     workdir = tempfile.mkdtemp(prefix="codex-switch-login-")
     try:
         env = os.environ.copy()
         env["CODEX_HOME"] = workdir
 
-        info(f"running {bold(args.codex_binary + ' login')} against a "
-             "temporary CODEX_HOME")
+        info(f"running {bold(' '.join([args.codex_binary] + argv[1:]))} "
+             "against a temporary CODEX_HOME")
         print(dim("     your current login is not touched by this"))
         try:
-            result = subprocess.run([binary, "login"], env=env)
+            result = subprocess.run(argv, env=env)
         except (OSError, subprocess.SubprocessError) as exc:
             raise CliError(f"could not run `{args.codex_binary} login`: {exc}")
         if result.returncode != 0:
@@ -215,22 +220,28 @@ def cmd_add(args):
                 "elsewhere. Log in normally and use "
                 f"`{shims.command_name()} save` instead."
             )
-
-        key = user_key(auth)
-        if not key:
+        if not user_key(auth):
             raise CliError("the new auth.json carries no recognisable login")
-
-        existing = find_by_user_key(key)
-        if existing:
-            raise CliError(f"that account is already saved as '{existing}'")
-
-        ident = identity(auth)
-        name = args.name or unique_name(_name_from_email(ident["email"]))
-        data = build_account(name, auth)
-        save_account(data)
+        return auth
     finally:
         # The temp dir holds a complete set of credentials - never leave it.
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def cmd_add(args):
+    """Log in as another account without disturbing the current one."""
+    auth = _login_elsewhere(args)
+
+    existing = find_by_user_key(user_key(auth))
+    if existing:
+        raise CliError(
+            f"that account is already saved as '{existing}' - to renew its "
+            f"tokens use: {shims.command_name()} login {existing}")
+
+    ident = identity(auth)
+    name = args.name or unique_name(_name_from_email(ident["email"]))
+    data = build_account(name, auth)
+    save_account(data)
 
     ok(f"added {bold(name)}  {account_summary(data)}")
     if args.activate:
@@ -239,6 +250,51 @@ def cmd_add(args):
         ok(f"switched to {bold(name)}")
     else:
         info(f"switch to it with: {shims.command_name()} {name}")
+    return 0
+
+
+def cmd_login(args):
+    """Log in again on an account that is already saved.
+
+    The way to recover from a dead refresh token. Plain `codex login` would do
+    it by overwriting the live auth.json, and with it the freshest tokens of
+    whichever account was active - tokens the store may not have caught up
+    with, since Codex rotates them as it runs.
+    """
+    if args.name:
+        # Fail before sending anyone through a browser.
+        load_account(args.name)
+
+    auth = _login_elsewhere(args)
+    key = user_key(auth)
+    email = identity(auth)["email"] or "unknown login"
+
+    existing = find_by_user_key(key)
+    if not existing:
+        raise CliError(
+            f"{email} is not a saved account - nothing was stored. "
+            f"To add it: {shims.command_name()} add")
+    if args.name and existing != args.name:
+        # Filing these tokens under args.name would give one login's
+        # credentials another account's name.
+        raise CliError(
+            f"logged in as {email}, which is saved as '{existing}', not "
+            f"'{args.name}' - nothing was stored")
+    name = existing
+
+    data = build_account(name, auth)
+    save_account(data)
+    ok(f"renewed {bold(name)}  {account_summary(data)}")
+
+    # Put the new tokens wherever the old ones are still in use. No autosave
+    # first: the live copy is this same account, and older than what we hold.
+    if current_user_key() == key:
+        apply_account(data)
+        info("it is the active account - updated auth.json as well")
+    if name in profiles.list_profiles():
+        profiles.ensure_profile(data)
+        print(dim(f"     restart any `{shims.command_name()} run` window on "
+                  f"{name}, or it will write its old tokens back on exit"))
     return 0
 
 

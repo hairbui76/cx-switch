@@ -100,6 +100,13 @@ cx add work --activate
 login runs with `CODEX_HOME` pointed at a temporary directory, so the new
 tokens never touch your live `auth.json`.
 
+On a machine with no browser — a server over SSH — add `--device` to log in
+with a device code instead (`codex login --device-auth` under the hood):
+
+```bash
+cx add work --device  # prints a URL and a code to enter on any other device
+```
+
 If you would rather log in the normal way:
 
 ```bash
@@ -107,6 +114,31 @@ codex login           # log in as usual
 cx save work          # store that login as "work"
 cx save               # or let it name the account from your email
 ```
+
+If another account is already logged in, run `cx save` for it *before*
+`codex login`, or its newest tokens are lost — see below.
+
+### Log in again when a token dies
+
+When `cx usage` shows `session ended` or `token rejected` for an account,
+renew it with `cx login` — **not** a plain `codex login`:
+
+```bash
+cx login work         # log in again, store the fresh tokens under "work"
+cx login              # ...or let it work out which account you logged in as
+cx login work --device
+```
+
+Like `cx add`, the login runs in a throwaway `CODEX_HOME`, so the account you
+are on stays exactly as it is. If you log in as a different account from the
+one named, nothing is stored. Renewing the active account updates
+`auth.json` too.
+
+Why not `codex login` then `cx save`? Codex rotates the active account's
+refresh token as it runs, and only `auth.json` has the newest one — the store
+catches up on the next switch. `codex login` overwrites `auth.json` before
+that happens, so the active account is left with a retired refresh token and
+shows `token rejected` next.
 
 ### Import credentials instead of logging in
 
@@ -435,8 +467,8 @@ distinguishable from a broken token.
 
 | `cx usage` says | Meaning |
 | --- | --- |
-| `session ended - run codex login` | The stored refresh token is dead. Switch to that account and log in again. |
-| `token rejected` | The access token was refused and could not be refreshed. Log in again. |
+| `session ended - run cx login` | The stored refresh token is dead. Run `cx login <name>`. |
+| `token rejected - run cx login` | The access token was refused and could not be refreshed. Run `cx login <name>`. |
 | `rate limited` | Too many requests. Wait and retry. |
 | `usage: HTTP 404` | The API moved. Check `doctor`, then open an issue. |
 | `-%` in a column | The plan has no limit in that window. Normal. |
