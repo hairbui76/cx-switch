@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/hairbui76/cx-switch/compare/v0.6.0...v0.7.0) (2026-10-04)
+
+
+### Features
+
+* add an OpenAI API key as an account with `cx add --api-key` ([0e5659f](https://github.com/hairbui76/cx-switch/commit/0e5659f23ad86bd0437807e28c2b671ac02cd189))
+
 ## [0.6.0](https://github.com/hairbui76/cx-switch/compare/v0.5.0...v0.6.0) (2026-09-23)
 
 
