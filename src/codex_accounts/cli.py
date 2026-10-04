@@ -44,7 +44,8 @@ def build_parser():
     p.add_argument("--activate", action="store_true",
                    help="switch to it once it is added")
     how = p.add_mutually_exclusive_group()
-    how.add_argument("--device", action="store_true",
+    how.add_argument("--device", "--device-auth", dest="device",
+                     action="store_true",
                      help="log in with a device code (no browser needed)")
     how.add_argument("--api-key", action="store_true",
                      help="add an OpenAI API key instead of a ChatGPT login; "
@@ -57,7 +58,8 @@ def build_parser():
                             "died, without disturbing the current one")
     p.add_argument("name", nargs="?",
                    help="account to renew (default: whichever you log in as)")
-    p.add_argument("--device", action="store_true",
+    p.add_argument("--device", "--device-auth", dest="device",
+                   action="store_true",
                    help="log in with a device code (no browser needed)")
     p.set_defaults(func=commands.cmd_login)
 

@@ -101,7 +101,8 @@ login runs with `CODEX_HOME` pointed at a temporary directory, so the new
 tokens never touch your live `auth.json`.
 
 On a machine with no browser — a server over SSH — add `--device` to log in
-with a device code instead (`codex login --device-auth` under the hood):
+with a device code instead (`codex login --device-auth` under the hood;
+`--device-auth` is accepted as well, on both `cx add` and `cx login`):
 
 ```bash
 cx add work --device  # prints a URL and a code to enter on any other device
