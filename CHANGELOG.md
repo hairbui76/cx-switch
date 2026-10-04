@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/hairbui76/cx-switch/compare/v0.7.0...v0.8.0) (2026-10-04)
+
+
+### Features
+
+* accept `--device-auth` as well as `--device` on `cx login` and `cx add` ([48581cd](https://github.com/hairbui76/cx-switch/commit/48581cd70ed2c713b5a8095f45072a3e7f698302))
+
 ## [0.7.0](https://github.com/hairbui76/cx-switch/compare/v0.6.0...v0.7.0) (2026-10-04)
 
 
