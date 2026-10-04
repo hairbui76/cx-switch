@@ -1,6 +1,7 @@
 """One function per subcommand. All of them return a process exit code."""
 
 import contextlib
+import getpass
 import json
 import os
 import shutil
@@ -12,8 +13,8 @@ import time
 from . import bindings, migrate, profiles, shims, updater
 from .api import (OAUTH_CLIENT_ID, TOKEN_URL, USAGE_URL, ApiError, fmt_credits,
                   fmt_window, http_json, usage_for, windows)
-from .credentials import (access_expires_at, identity, normalize_auth,
-                          read_auth, user_key)
+from .credentials import (access_expires_at, api_key, identity, mask_key,
+                          normalize_auth, read_auth, user_key)
 from .jsonio import read_json
 from .paths import (account_path, auth_path, codex_dir, profile_dir,
                     profiles_dir, sessions_dir, store_dir)
@@ -164,7 +165,11 @@ def cmd_import(args):
        f"{dim('from ' + label)}")
     _report_token(auth)
 
-    if args.verify:
+    if args.verify and api_key(auth):
+        # The usage endpoint is the only check there is, and it does not
+        # answer to an API key.
+        warn("--verify skipped - an API key cannot be checked this way")
+    elif args.verify:
         info("checking the credentials against the API")
         usage = usage_for(data)
         ok(f"verified - {usage.get('email') or '?'} "
@@ -179,6 +184,29 @@ def cmd_import(args):
     return 0
 
 
+def _read_api_key() -> str:
+    """The key for --api-key: piped stdin, else $OPENAI_API_KEY, else a prompt.
+
+    Never an argument - that would leave it in shell history and in `ps`.
+    """
+    interactive = bool(sys.stdin) and sys.stdin.isatty()
+    key = "" if interactive or not sys.stdin else sys.stdin.read().strip()
+    if key:
+        return key
+
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if key:
+        info("using the key in OPENAI_API_KEY")
+        return key
+
+    if interactive:
+        key = getpass.getpass("OpenAI API key: ").strip()
+    if not key:
+        raise CliError("no API key given - pipe it on stdin, or set "
+                       "OPENAI_API_KEY")
+    return key
+
+
 def _login_elsewhere(args):
     """Run `codex login` against a throwaway CODEX_HOME; return its auth.json.
 
@@ -191,7 +219,11 @@ def _login_elsewhere(args):
                        "install Codex, or pass --codex-binary")
 
     argv = [binary, "login"]
-    if args.device:
+    key = None
+    if getattr(args, "api_key", False):
+        key = _read_api_key()
+        argv.append("--with-api-key")
+    elif args.device:
         # No browser on this machine: Codex prints a URL and a code to enter
         # on any other device instead.
         argv.append("--device-auth")
@@ -205,7 +237,12 @@ def _login_elsewhere(args):
              "against a temporary CODEX_HOME")
         print(dim("     your current login is not touched by this"))
         try:
-            result = subprocess.run(argv, env=env)
+            if key:
+                # Codex reads the key from stdin, the same way we were given it.
+                result = subprocess.run(argv, env=env, input=key + "\n",
+                                        universal_newlines=True)
+            else:
+                result = subprocess.run(argv, env=env)
         except (OSError, subprocess.SubprocessError) as exc:
             raise CliError(f"could not run `{args.codex_binary} login`: {exc}")
         if result.returncode != 0:
@@ -222,6 +259,9 @@ def _login_elsewhere(args):
             )
         if not user_key(auth):
             raise CliError("the new auth.json carries no recognisable login")
+        if key and api_key(auth) != key:
+            raise CliError("`codex login --with-api-key` finished without "
+                           "storing the key - nothing was saved")
         return auth
     finally:
         # The temp dir holds a complete set of credentials - never leave it.
@@ -230,16 +270,27 @@ def _login_elsewhere(args):
 
 def cmd_add(args):
     """Log in as another account without disturbing the current one."""
+    if args.name and args.name in list_accounts():
+        # Fail before sending anyone through a browser - and before the save
+        # below could file a new login over an account that is already there.
+        raise CliError(
+            f"account '{args.name}' already exists - pick another name, or "
+            f"renew it with: {shims.command_name()} login {args.name}")
+
     auth = _login_elsewhere(args)
 
     existing = find_by_user_key(user_key(auth))
     if existing:
+        if api_key(auth):
+            raise CliError(f"that API key is already saved as '{existing}'")
         raise CliError(
             f"that account is already saved as '{existing}' - to renew its "
             f"tokens use: {shims.command_name()} login {existing}")
 
     ident = identity(auth)
-    name = args.name or unique_name(_name_from_email(ident["email"]))
+    # An API key names nobody, so there is no email to derive a name from.
+    fallback = "apikey" if api_key(auth) else "account"
+    name = args.name or unique_name(_name_from_email(ident["email"], fallback))
     data = build_account(name, auth)
     save_account(data)
 
@@ -263,7 +314,11 @@ def cmd_login(args):
     """
     if args.name:
         # Fail before sending anyone through a browser.
-        load_account(args.name)
+        if api_key(load_account(args.name).get("auth")):
+            raise CliError(
+                f"'{args.name}' is an API-key account - it has no session to "
+                "renew. To change its key, remove it and add the new one "
+                f"with: {shims.command_name()} add {args.name} --api-key")
 
     auth = _login_elsewhere(args)
     key = user_key(auth)
@@ -521,7 +576,9 @@ def cmd_status(args):
     name = find_by_user_key(user_key(auth))
     label = bold(name) if name else yellow("(unsaved)")
     bits = [b for b in (ident["planType"], ident["organizationName"]) if b]
-    print(f"{green('[ok]')} current: {label}  {ident['email'] or '?'}"
+    key = api_key(auth)
+    who = ident["email"] or (mask_key(key) if key else "?")
+    print(f"{green('[ok]')} current: {label}  {who}"
           f"{dim('  ' + ' / '.join(bits)) if bits else ''}")
 
     expires = access_expires_at(auth)
@@ -554,6 +611,10 @@ def cmd_usage(args):
     for name in names:
         try:
             data = load_account(name)
+            if api_key(data.get("auth")):
+                # Nothing to fetch, and not a failure either.
+                rows.append((name, data, None, None))
+                continue
             rows.append((name, data, usage_for(data), None))
         except CliError as exc:
             # ApiError already explains which call failed and why.
@@ -570,6 +631,10 @@ def cmd_usage(args):
         marker = green("*") if name == current else " "
         if error:
             print(f"{marker} {name.ljust(width)}  {red(error)}")
+            continue
+        if usage is None:
+            print(f"{marker} {name.ljust(width)}  {'api'.ljust(plan_width)}  "
+                  f"{dim('api key - billed per token, no plan usage')}")
             continue
         primary, secondary = windows(usage)
         plan = (usage.get("plan_type") or data.get("planType") or "?")

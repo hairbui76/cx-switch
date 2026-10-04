@@ -11,7 +11,8 @@ import shutil
 from datetime import datetime, timezone
 
 from . import shims
-from .credentials import identity, read_auth, user_key, write_auth
+from .credentials import (api_key, identity, mask_key, read_auth, user_key,
+                          write_auth)
 from .jsonio import read_json, write_json
 from .paths import (account_path, auth_backup_path, auth_path, store_dir)
 from .term import CliError, dim, warn
@@ -68,7 +69,8 @@ def load_account(name: str):
 
 
 def account_summary(data) -> str:
-    email = data.get("email") or "?"
+    key = api_key(data.get("auth"))
+    email = data.get("email") or (mask_key(key) if key else "?")
     bits = [b for b in (data.get("planType"),
                         data.get("organizationName")) if b]
     return f"{email}{dim('  ' + ' / '.join(bits)) if bits else ''}"

@@ -107,6 +107,22 @@ with a device code instead (`codex login --device-auth` under the hood):
 cx add work --device  # prints a URL and a code to enter on any other device
 ```
 
+To add an **OpenAI API key** instead of a ChatGPT login, pass `--api-key`
+(`codex login --with-api-key` under the hood). The key is never an argument,
+so it stays out of your shell history:
+
+```bash
+printenv OPENAI_API_KEY | cx add work-key --api-key   # piped on stdin
+OPENAI_API_KEY=sk-... cx add work-key --api-key       # ...or from the env
+cx add work-key --api-key                             # ...or typed at a prompt
+```
+
+An API-key account switches, binds and runs like any other. It is billed per
+token rather than against a plan, so `cx usage` has no limits to show for it,
+and it has no session to expire — `cx login` does not apply. To replace a key,
+`cx rm` the account and add the new key under the same name — directories
+bound to it need `cx bind` again.
+
 If you would rather log in the normal way:
 
 ```bash
@@ -469,6 +485,7 @@ distinguishable from a broken token.
 | --- | --- |
 | `session ended - run cx login` | The stored refresh token is dead. Run `cx login <name>`. |
 | `token rejected - run cx login` | The access token was refused and could not be refreshed. Run `cx login <name>`. |
+| `api key - billed per token, no plan usage` | An API-key account. It has no plan limits to report. Normal. |
 | `rate limited` | Too many requests. Wait and retry. |
 | `usage: HTTP 404` | The API moved. Check `doctor`, then open an issue. |
 | `-%` in a column | The plan has no limit in that window. Normal. |

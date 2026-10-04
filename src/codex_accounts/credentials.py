@@ -54,6 +54,22 @@ def tokens(auth):
     return {}
 
 
+def api_key(auth):
+    """The key of an API-key login, or None for a ChatGPT one.
+
+    A ChatGPT login may carry an OPENAI_API_KEY too, so the tokens decide.
+    """
+    if tokens(auth).get("access_token"):
+        return None
+    key = (auth or {}).get("OPENAI_API_KEY")
+    return key if isinstance(key, str) and key else None
+
+
+def mask_key(key: str) -> str:
+    """Enough of a key to tell two apart, without printing either."""
+    return f"api key ...{key[-4:]}" if len(key) >= 12 else "api key"
+
+
 def normalize_auth(data):
     """Coerce a parsed JSON blob into auth.json shape.
 

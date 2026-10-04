@@ -43,8 +43,13 @@ def build_parser():
                    help="account name (default: from email)")
     p.add_argument("--activate", action="store_true",
                    help="switch to it once it is added")
-    p.add_argument("--device", action="store_true",
-                   help="log in with a device code (no browser needed)")
+    how = p.add_mutually_exclusive_group()
+    how.add_argument("--device", action="store_true",
+                     help="log in with a device code (no browser needed)")
+    how.add_argument("--api-key", action="store_true",
+                     help="add an OpenAI API key instead of a ChatGPT login; "
+                          "the key is read from stdin, else OPENAI_API_KEY, "
+                          "else prompted for")
     p.set_defaults(func=commands.cmd_add)
 
     p = sub.add_parser("login",

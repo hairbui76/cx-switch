@@ -18,8 +18,8 @@ import urllib.request
 from datetime import datetime, timezone
 
 from . import profiles, shims
-from .credentials import (access_expires_at, read_auth, tokens, user_key,
-                          write_auth)
+from .credentials import (access_expires_at, api_key, read_auth, tokens,
+                          user_key, write_auth)
 from .store import build_account, current_user_key, save_account
 from .term import CliError, debug, dim, green, red, yellow
 
@@ -195,6 +195,10 @@ def token_for(data):
         save_account(build_account(data["name"], auth))
 
     blk = tokens(auth)
+    if api_key(auth):
+        # Billed per token by the API platform; the usage endpoint only knows
+        # ChatGPT plans, and only answers to an OAuth token.
+        raise CliError("API-key account - it has no plan usage to report")
     if not blk.get("access_token"):
         raise CliError("no access token stored - run `codex login`")
     if _fresh(auth):
