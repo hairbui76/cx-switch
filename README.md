@@ -273,7 +273,8 @@ same one the rest of this tool makes:
 ```
 
 Everything in `~/.codex` is shared unless it names an account: `auth.json`, the
-model list a plan is entitled to (`models_cache.json`), and scratch
+model list a plan is entitled to (`models_cache.json`), the background
+server's state (`app-server-daemon/`, one server per account), and scratch
 directories. Anything a future Codex release adds is shared by default.
 `cx doctor` lists what ended up shared per profile.
 

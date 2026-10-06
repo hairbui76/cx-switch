@@ -28,13 +28,19 @@ from .term import CliError, dim, warn
 
 # Everything in ~/.codex is linked into a profile except these: the file that
 # says who is logged in, a login this tool set aside, the cache of what a plan
-# is entitled to, and scratch directories. Anything a future Codex release adds
-# is therefore shared by default, which is the promise the rest of the tool
-# makes.
+# is entitled to, the background server's state, and scratch directories.
+# Anything a future Codex release adds is therefore shared by default, which is
+# the promise the rest of the tool makes.
+#
+# `app-server-daemon` holds the socket of a server that is logged in as one
+# account, so a shared one would answer this profile's window as whoever
+# started it first. Codex will not have it any other way either: it refuses to
+# start when the path is a link rather than a directory of its own.
 PRIVATE_ENTRIES = frozenset((
     "auth.json",
     "auth.json.bak",
     "models_cache.json",
+    "app-server-daemon",
     "tmp",
     ".tmp",
 ))
@@ -246,6 +252,27 @@ def _note_unshared(profile: str, skipped) -> None:
         print(dim("     enable Developer Mode to share them too"))
 
 
+def _unshare_private(root: str, profile: str) -> None:
+    """Drop links to entries that have since become private.
+
+    A profile built by an older release still links whatever that release
+    shared. Only a link back into ~/.codex is removed - what the profile has
+    put there itself stays.
+    """
+    for entry in PRIVATE_ENTRIES:
+        dst = os.path.join(profile, entry)
+        if not _is_link(dst):
+            continue
+        src = os.path.join(root, entry)
+        if not (_same(src, dst)
+                or _within(os.path.realpath(dst), os.path.realpath(root))):
+            continue
+        try:
+            _drop_link(dst)
+        except OSError as exc:
+            warn(f"{entry}: could not unlink it from the profile: {exc}")
+
+
 def link_shared(profile: str) -> None:
     """(Re)point everything shareable in `profile` at ~/.codex.
 
@@ -254,6 +281,7 @@ def link_shared(profile: str) -> None:
     """
     root = shared_root()
     skipped = []
+    _unshare_private(root, profile)
 
     for entry in _shareable(root):
         src = os.path.join(root, entry)
