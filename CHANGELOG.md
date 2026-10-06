@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/hairbui76/cx-switch/compare/v0.8.0...v0.8.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* keep Codex's background-server state out of the shared links ([d7111c8](https://github.com/hairbui76/cx-switch/commit/d7111c8a145edab1e04b29a3c3b394b1d18702ba))
+
 ## [0.8.0](https://github.com/hairbui76/cx-switch/compare/v0.7.0...v0.8.0) (2026-10-04)
 
 
