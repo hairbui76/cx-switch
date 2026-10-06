@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/hairbui76/cx-switch/compare/v0.8.1...v0.8.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* give each profile its own Codex background server ([4da6999](https://github.com/hairbui76/cx-switch/commit/4da6999ac1d7085b6c8d4f96be26b1732e1dba10))
+
 ## [0.8.1](https://github.com/hairbui76/cx-switch/compare/v0.8.0...v0.8.1) (2026-10-06)
 
 
