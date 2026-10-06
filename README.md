@@ -273,9 +273,13 @@ same one the rest of this tool makes:
 ```
 
 Everything in `~/.codex` is shared unless it names an account: `auth.json`, the
-model list a plan is entitled to (`models_cache.json`), the background
-server's state (`app-server-daemon/`, one server per account), and scratch
+model list a plan is entitled to (`models_cache.json`), Codex's background
+server (`app-server-daemon/` and `app-server-control/`), and scratch
 directories. Anything a future Codex release adds is shared by default.
+
+The background server is logged in as one account, so each profile runs its
+own. A profile that shared `~/.codex`'s would show whichever account *that*
+server is on, whatever the profile's `auth.json` says.
 `cx doctor` lists what ended up shared per profile.
 
 Profiles are keyed by account, not by directory, so ten repositories bound to

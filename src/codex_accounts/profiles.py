@@ -32,15 +32,18 @@ from .term import CliError, dim, warn
 # Anything a future Codex release adds is therefore shared by default, which is
 # the promise the rest of the tool makes.
 #
-# `app-server-daemon` holds the socket of a server that is logged in as one
-# account, so a shared one would answer this profile's window as whoever
-# started it first. Codex will not have it any other way either: it refuses to
-# start when the path is a link rather than a directory of its own.
+# The two `app-server-*` directories are the background server's: its pid and
+# locks in one, the socket clients connect to in the other. The server is
+# logged in as one account, so a profile that links either of them is talking
+# to ~/.codex's server and shows whoever *that* is logged in as, whatever its
+# own auth.json says. (Codex also refuses to start when `app-server-daemon` is
+# a link rather than a directory of its own.)
 PRIVATE_ENTRIES = frozenset((
     "auth.json",
     "auth.json.bak",
     "models_cache.json",
     "app-server-daemon",
+    "app-server-control",
     "tmp",
     ".tmp",
 ))
