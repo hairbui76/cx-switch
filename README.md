@@ -202,6 +202,19 @@ The account you are leaving is auto-saved first, so rotated tokens are never
 lost. If you were logged in as an account that had never been saved, it gets
 stored under a name derived from your email rather than being thrown away.
 
+Recent Codex releases keep a **background server** running, and it reads
+`auth.json` only when it starts — every window attached to it goes on showing
+the account it started with. So when that server is running, a switch restarts
+it (`codex app-server daemon restart`). That interrupts sessions in progress on
+it; pass `--no-restart` to leave it alone and restart it yourself later:
+
+```bash
+cx work --no-restart
+```
+
+A server that is not running is never started, and older Codex releases, which
+have none, are not affected.
+
 ### Inspect
 
 ```bash

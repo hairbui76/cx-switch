@@ -74,6 +74,55 @@ def autosave_current():
     return derived
 
 
+def restart_daemon(args, home=None) -> None:
+    """Restart Codex's background server so it logs in as the new account.
+
+    The server reads auth.json once, when it starts, and every window attached
+    to it shows that account - so after a switch they would all carry on as
+    the previous one. Only a server that is already running is touched:
+    `restart` starts one otherwise, which nobody asked for.
+    """
+    if getattr(args, "no_restart", False):
+        return
+    home = home or codex_dir()
+    if not os.path.isdir(os.path.join(home, "app-server-daemon")):
+        # A Codex from before the background server, or one never started.
+        return
+    binary = shutil.which(args.codex_binary)
+    if not binary:
+        return
+
+    env = dict(os.environ)
+    env["CODEX_HOME"] = home
+
+    def daemon(verb):
+        return subprocess.run([binary, "app-server", "daemon", verb], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              universal_newlines=True, timeout=60)
+
+    manual = f"CODEX_HOME={home} codex app-server daemon restart"
+    try:
+        # Exits non-zero when no server is running - or when this Codex has
+        # no such command at all.
+        if daemon("version").returncode != 0:
+            return
+        done = daemon("restart")
+    except (OSError, subprocess.SubprocessError) as exc:
+        warn(f"could not restart Codex's background server ({exc}) - until "
+             f"it restarts, windows keep the previous account: {manual}")
+        return
+
+    if done.returncode == 0:
+        info("restarted Codex's background server so it picks the account up")
+        print(dim("     sessions that were running on it were interrupted - "
+                  "pass --no-restart to leave it alone"))
+    else:
+        detail = (done.stderr or done.stdout or "").strip().splitlines()
+        warn("could not restart Codex's background server"
+             f"{' (' + detail[-1] + ')' if detail else ''} - until it "
+             f"restarts, windows keep the previous account: {manual}")
+
+
 # --------------------------------------------------------------------------
 # saving
 # --------------------------------------------------------------------------
@@ -179,6 +228,7 @@ def cmd_import(args):
         autosave_current()
         apply_account(data)
         ok(f"switched to {bold(name)}")
+        restart_daemon(args)
     else:
         info(f"switch to it with: {shims.command_name()} {name}")
     return 0
@@ -299,6 +349,7 @@ def cmd_add(args):
         autosave_current()
         apply_account(data)
         ok(f"switched to {bold(name)}")
+        restart_daemon(args)
     else:
         info(f"switch to it with: {shims.command_name()} {name}")
     return 0
@@ -346,8 +397,9 @@ def cmd_login(args):
     if current_user_key() == key:
         apply_account(data)
         info("it is the active account - updated auth.json as well")
+        restart_daemon(args)
     if name in profiles.list_profiles():
-        profiles.ensure_profile(data)
+        restart_daemon(args, profiles.ensure_profile(data))
         print(dim(f"     restart any `{shims.command_name()} run` window on "
                   f"{name}, or it will write its old tokens back on exit"))
     return 0
@@ -367,6 +419,7 @@ def cmd_switch(args):
     apply_account(target)
     ok(f"switched to {bold(args.name)}  {account_summary(target)}")
     info("sessions, config.toml and history are shared - nothing else to sync")
+    restart_daemon(args)
     return 0
 
 

@@ -18,6 +18,13 @@ KNOWN_ARGS = {
 }
 
 
+def _no_restart(p) -> None:
+    p.add_argument("--no-restart", action="store_true",
+                   help="leave Codex's background server running on the "
+                        "previous account (restarting it interrupts sessions "
+                        "in progress)")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog=shims.command_name(),
@@ -51,6 +58,7 @@ def build_parser():
                      help="add an OpenAI API key instead of a ChatGPT login; "
                           "the key is read from stdin, else OPENAI_API_KEY, "
                           "else prompted for")
+    _no_restart(p)
     p.set_defaults(func=commands.cmd_add)
 
     p = sub.add_parser("login",
@@ -61,6 +69,7 @@ def build_parser():
     p.add_argument("--device", "--device-auth", dest="device",
                    action="store_true",
                    help="log in with a device code (no browser needed)")
+    _no_restart(p)
     p.set_defaults(func=commands.cmd_login)
 
     p = sub.add_parser("import",
@@ -76,6 +85,7 @@ def build_parser():
                         "trusting them")
     p.add_argument("--force", action="store_true",
                    help="replace an account that already exists")
+    _no_restart(p)
     p.set_defaults(func=commands.cmd_import)
 
     p = sub.add_parser("save", help="save the current login as an account")
@@ -85,9 +95,11 @@ def build_parser():
 
     p = sub.add_parser("use", help="switch to an account")
     p.add_argument("name")
+    _no_restart(p)
     p.set_defaults(func=commands.cmd_switch)
 
     p = sub.add_parser("next", help="switch to the next account (round-robin)")
+    _no_restart(p)
     p.set_defaults(func=commands.cmd_next)
 
     p = sub.add_parser("run", help="start Codex on this directory's account")
