@@ -265,6 +265,29 @@ cd ~/side/scraper && cx run     # this one is personal, at the same time
 Everything after `cx run` goes straight to Codex, so `cx run resume`,
 `cx run --model gpt-5.6-sol` and `cx run exec "..."` all work as usual.
 
+### Resuming a session on another account
+
+Sessions are shared, so a session started on one account can be resumed on
+another — `cx run -a personal resume <id>`. Codex lets only one process hold a
+session at a time, though, and through its background server a session stays
+held for about a minute after its window closes. Resuming it on another
+account in that minute is refused with *"This conversation is open in another
+app"*.
+
+So `cx run` opens Codex windows **without the background server**
+(`--no-daemon`, on Codex releases that have one): the window holds the session
+itself and lets go the moment it closes. If the session is still held
+elsewhere when you `cx run resume <id>` — by a plain `codex` window's server,
+say — `cx run` says who holds it and waits for it to be let go, rather than
+handing you Codex's error screen.
+
+Without the server, a turn stops when its window closes instead of carrying on
+in the background. To keep that, pass `--daemon`:
+
+```bash
+cx run --daemon resume <id>
+```
+
 ```bash
 cx bindings           # every directory -> account, with the one you are in marked
 cx unbind             # drop this directory's binding (the account is kept)

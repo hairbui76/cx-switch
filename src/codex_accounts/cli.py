@@ -105,6 +105,10 @@ def build_parser():
     p = sub.add_parser("run", help="start Codex on this directory's account")
     p.add_argument("-a", "--account",
                    help="ignore the binding and use this account")
+    p.add_argument("--daemon", action="store_true",
+                   help="let the window use Codex's background server; by "
+                        "default it runs without one, so the session is "
+                        "released the moment the window closes")
     p.add_argument("argv", nargs="*", metavar="...",
                    help="arguments passed straight to codex")
     p.set_defaults(func=commands.cmd_run)
@@ -212,6 +216,9 @@ def _split_run(argv, start):
         token = argv[index]
         if token in ("-a", "--account"):
             index += 2
+            continue
+        if token == "--daemon":
+            index += 1
             continue
         # `cx run --help` is a question about `cx run`. Codex's own help is
         # still reachable, as `cx run -- --help`.

@@ -537,7 +537,8 @@ def cmd_run(args):
     data = load_account(name)
     info(f"{bold(name)}  {account_summary(data)}"
          f"{_origin_note(source, origin)}")
-    return profiles.launch(data, argv, binary=args.codex_binary)
+    return profiles.launch(data, argv, binary=args.codex_binary,
+                           daemon=args.daemon)
 
 
 def _default_shell() -> str:

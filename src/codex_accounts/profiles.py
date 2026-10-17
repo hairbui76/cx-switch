@@ -14,17 +14,19 @@ which is exactly what two windows on the same login do today.
 """
 
 import os
+import re
 import shutil
 import signal
 import subprocess
 import sys
+import time
 
 from . import shims
 from .credentials import access_expires_at, identity, user_key
 from .jsonio import read_json, write_json
-from .paths import codex_dir, profile_dir, profiles_dir
+from .paths import codex_dir, profile_dir, profiles_dir, store_dir
 from .store import build_account, load_account, save_account
-from .term import CliError, dim, warn
+from .term import CliError, dim, info, ok, warn
 
 # Everything in ~/.codex is linked into a profile except these: the file that
 # says who is logged in, a login this tool set aside, the cache of what a plan
@@ -515,6 +517,198 @@ def codex_executable(binary=None) -> str:
     return found
 
 
+# Codex subcommands that are not a conversation window. Anything else - no
+# subcommand, `resume`, `fork`, or a prompt - opens one.
+NOT_A_WINDOW = frozenset((
+    "exec", "e", "review", "login", "logout", "mcp", "mcp-server", "plugin",
+    "app-server", "remote-control", "app", "completion", "update", "doctor",
+    "sandbox", "debug", "apply", "a", "queue", "archive", "delete",
+    "migrate-rollouts", "unarchive", "cloud", "exec-server", "features",
+    "help", "agents",
+))
+
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-"
+                  r"[0-9a-f]{12}$", re.IGNORECASE)
+
+# How long `cx run resume <id>` waits for another process to let go of the
+# session. A background server lets go about a minute after its last window
+# closes, so this covers that with room to spare.
+LOCK_WAIT_S = 120
+
+
+def _positionals(argv):
+    return [token for token in argv if not token.startswith("-")]
+
+
+def _opens_window(argv) -> bool:
+    words = _positionals(argv)
+    return not words or words[0] not in NOT_A_WINDOW
+
+
+def _supports_no_daemon(executable: str) -> bool:
+    """Whether this Codex has `--no-daemon`. Older ones reject it outright.
+
+    Asked once per build: the answer is cached against the executable's size
+    and mtime, so an update is noticed and nothing else pays for the check.
+    """
+    try:
+        st = os.stat(os.path.realpath(executable))
+        stamp = f"{os.path.realpath(executable)}|{st.st_size}|{st.st_mtime}"
+    except OSError:
+        return False
+
+    cache_path = os.path.join(store_dir(), ".codex-capabilities.json")
+    try:
+        cache = read_json(cache_path, {})
+    except CliError:
+        cache = {}
+    if isinstance(cache, dict) and cache.get("stamp") == stamp:
+        return bool(cache.get("no_daemon"))
+
+    try:
+        out = subprocess.run([executable, "--help"], stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, universal_newlines=True,
+                             timeout=30).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return False
+    supported = "--no-daemon" in out
+    try:
+        write_json(cache_path, {"stamp": stamp, "no_daemon": supported})
+    except (OSError, CliError):
+        pass
+    return supported
+
+
+def window_argv(argv, executable: str, daemon: bool = False):
+    """Codex's arguments, with `--no-daemon` added for a conversation window.
+
+    Through the background server, a window's session stays open in that
+    server for about a minute after the window closes - longer while a turn is
+    still running. The session file is shared by every account, so resuming it
+    on another account straight away is refused with "This conversation is
+    open in another app". Without the server, the window holds the session
+    itself and lets go the moment it closes.
+    """
+    argv = list(argv)
+    if daemon or not _opens_window(argv):
+        return argv
+    if any(token == "--no-daemon" or token.startswith("--remote")
+           for token in argv):
+        # Already decided by the caller - `--remote` and `--no-daemon` are
+        # mutually exclusive.
+        return argv
+    if not _supports_no_daemon(executable):
+        return argv
+    return ["--no-daemon"] + argv
+
+
+def _thread_to_resume(argv):
+    # `resume` need not come first: an option's value - `-m gpt-5` - is a
+    # positional word too.
+    words = _positionals(argv)
+    if "resume" in words:
+        rest = words[words.index("resume") + 1:]
+        if rest and UUID.match(rest[0]):
+            return rest[0]
+    return None
+
+
+def _lock_held(path: str) -> bool:
+    """Whether another process holds Codex's writer lock on `path`."""
+    try:
+        import fcntl
+    except ImportError:
+        return False            # Windows: no flock to probe with
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return False            # Codex removes the file when it lets go
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        os.close(fd)
+
+
+def _lock_holder(path: str):
+    """CODEX_HOME of the process holding `path`, where /proc can tell."""
+    try:
+        target = os.path.realpath(path)
+        pids = [pid for pid in os.listdir("/proc") if pid.isdigit()]
+    except OSError:
+        return None
+    for pid in pids:
+        fds = os.path.join("/proc", pid, "fd")
+        try:
+            names = os.listdir(fds)
+        except OSError:
+            continue
+        for fd in names:
+            try:
+                if os.readlink(os.path.join(fds, fd)) != target:
+                    continue
+                with open(os.path.join("/proc", pid, "environ"), "rb") as fh:
+                    env = fh.read().split(b"\0")
+            except OSError:
+                break
+            for entry in env:
+                if entry.startswith(b"CODEX_HOME="):
+                    return entry[len(b"CODEX_HOME="):].decode(
+                        "utf-8", "replace")
+            return os.path.join(os.path.expanduser("~"), ".codex")
+    return None
+
+
+def _describe_holder(home):
+    if not home:
+        return "another Codex process", None
+    if _within(home, profiles_dir()):
+        name = os.path.basename(os.path.normpath(home))
+        return f"Codex on account {name} (cx run)", home
+    return f"Codex outside cx run ({home})", home
+
+
+def wait_for_session(argv) -> None:
+    """Hold `cx run resume <id>` until no other process has that session.
+
+    The usual holder is a background server from the previous account, which
+    lets go by itself about a minute after its last window closed; waiting
+    for it here beats Codex's "open in another app" screen.
+    """
+    thread = _thread_to_resume(argv)
+    if not thread:
+        return
+    path = os.path.join(shared_root(), "thread-writer-locks", f"{thread}.lock")
+    if not _lock_held(path):
+        return
+
+    who, home = _describe_holder(_lock_holder(path))
+    stop = (f"CODEX_HOME={home} codex app-server daemon stop" if home
+            else "codex app-server daemon stop")
+    warn(f"session {thread} is still open in {who}")
+    print(dim("     a background server lets go about a minute after its "
+              "last window closes - waiting (Ctrl-C to give up)"))
+    sys.stdout.flush()
+
+    deadline = time.time() + LOCK_WAIT_S
+    try:
+        while time.time() < deadline:
+            time.sleep(1)
+            if not _lock_held(path):
+                ok("the session is free - starting Codex")
+                return
+    except KeyboardInterrupt:
+        print()
+        raise CliError("gave up waiting - close the session there, or stop "
+                       f"its server: {stop}")
+    warn(f"still open after {LOCK_WAIT_S}s - most likely a turn is still "
+         f"running there. Close it, or stop its server: {stop}")
+    info("starting Codex anyway")
+
+
 def _swallow_interrupt() -> None:
     """Stop Ctrl-C from killing this wrapper: the key belongs to Codex.
 
@@ -530,10 +724,12 @@ def _swallow_interrupt() -> None:
         pass
 
 
-def launch(data, argv, binary=None) -> int:
+def launch(data, argv, binary=None, daemon=False) -> int:
     """Run Codex against `data`'s profile and wait for it to exit."""
     path = ensure_profile(data)
     executable = codex_executable(binary)
+    argv = window_argv(argv, executable, daemon)
+    wait_for_session(argv)
 
     env = dict(os.environ)
     env["CODEX_HOME"] = path
